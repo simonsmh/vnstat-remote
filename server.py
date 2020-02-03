@@ -1,10 +1,11 @@
-import socket
-import sys
+import asyncio
+import base64
 import logging
 import subprocess
-import asyncio
+import sys
+from hashlib import blake2s
 
-PORT = 10000
+from cryptography.fernet import Fernet
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -28,18 +29,29 @@ async def handler(reader, writer):
         logger.warning(f"Subprocess: {err}")
         result = '{"result": "error"}'.encode()
 
-    logger.debug(f"Sending: {result}")
-    writer.write(result)
+    result_encrypted = f.encrypt(result)
+    logger.debug(f"Sending:\n{result}\n{result_encrypted}")
+    writer.write(result_encrypted)
     await writer.drain()
     writer.close()
 
 
-async def main():
-    server = await asyncio.start_server(handler, port=PORT, reuse_port=True)
+async def main(port):
+    server = await asyncio.start_server(handler, port=port, reuse_port=True)
     addr = server.sockets[0].getsockname()
     logger.info(f"Serving on {addr}")
     await server.serve_forever()
 
 
+def init_key(password):
+    key = base64.urlsafe_b64encode(
+        blake2s(password.encode(), digest_size=16).hexdigest().encode()
+    )
+    return Fernet(key)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    password = sys.argv[1] if len(sys.argv) >= 2 else "test"
+    port = int(sys.argv[2]) if len(sys.argv) >= 3 else 10000
+    f = init_key(password)
+    asyncio.run(main(port))
