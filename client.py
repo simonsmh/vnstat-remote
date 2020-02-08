@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timedelta
 from hashlib import blake2s
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -15,12 +15,13 @@ logging.basicConfig(
 logger = logging.getLogger("VnStat Client")
 
 
-async def get_vnstat(loop, addr):
+async def get_vnstat(addr):
     try:
         reader, writer = await asyncio.open_connection(
-            addr.get("host"), addr.get("port"), loop=loop
+            addr.get("host"), addr.get("port")
         )
     except ConnectionRefusedError:
+        logger.warning(f"ConnectionRefusedError for {addr.get('host')}")
         return False
     begin = addr.get("begin")
     if begin > datetime.now().day:
@@ -32,9 +33,12 @@ async def get_vnstat(loop, addr):
     writer.write(request_encrypted)
     await writer.drain()
     data = await reader.read(4096)
-    data_decrypted = f.decrypt(data)
     writer.close()
-    data_decrypted = json.loads(data_decrypted)
+    try:
+        data_decrypted = json.loads(f.decrypt(data))
+    except InvalidToken:
+        logger.warning(f"InvalidToken for {addr.get('host')}")
+        return False
     if data_decrypted.get("error"):
         logger.warning(f"{data_decrypted.get('error')}")
         return False
@@ -47,8 +51,10 @@ def init_key(password):
     )
     return Fernet(key)
 
+
 def get_expect(dict):
-    return sum(dict)/len(dict)*31
+    return sum(dict) / len(dict) * 31
+
 
 if __name__ == "__main__":
     password = sys.argv[1] if len(sys.argv) >= 2 else "test"
@@ -58,7 +64,7 @@ if __name__ == "__main__":
         {"host": "127.0.0.1", "port": 10000, "begin": 7},
     ]
     loop = asyncio.get_event_loop()
-    tasks = [get_vnstat(loop, addr) for addr in addrs]
+    tasks = [get_vnstat(addr) for addr in addrs]
     results = loop.run_until_complete(asyncio.gather(*tasks))
     for i, result in enumerate(results):
         if not result:
