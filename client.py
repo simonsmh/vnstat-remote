@@ -1,7 +1,7 @@
+import asyncio
 import base64
 import json
 import logging
-import socket
 import sys
 from hashlib import blake2s
 
@@ -14,12 +14,21 @@ logging.basicConfig(
 logger = logging.getLogger("VnStat Client")
 
 
-def get_vnstat(mode, host, port):
-    with socket.create_connection((host, port)) as s:
-        s.sendall(mode.encode())
-        data = s.recv(4096)
+async def get_vnstat(mode, addr):
+    host, port = addr
+    try:
+        reader, writer = await asyncio.open_connection(host, port, loop=loop)
+    except ConnectionRefusedError:
+        return False
+    writer.write(mode.encode())
+    await writer.drain()
+    data = await reader.read(4096)
     data_decrypted = f.decrypt(data)
-    return json.loads(data_decrypted)
+    writer.close()
+    data_decrypted = json.loads(data_decrypted)
+    if data_decrypted.get("result"):
+        return False
+    return data_decrypted
 
 
 def init_key(password):
@@ -32,5 +41,10 @@ def init_key(password):
 if __name__ == "__main__":
     password = sys.argv[1] if len(sys.argv) >= 2 else "test"
     f = init_key(password)
-    result = get_vnstat("m", "127.0.0.1", 10000)
-    logger.info(result)
+    addrs = [("127.0.0.1", 10000), ("127.0.0.1", 10000)]
+    loop = asyncio.get_event_loop()
+    tasks = [get_vnstat("m", addr) for addr in addrs]
+    result = loop.run_until_complete(asyncio.gather(*tasks))
+    for i, r in enumerate(result):
+        if r:
+            logger.info(f"Received from {addrs[i][0]}:\n{r}")

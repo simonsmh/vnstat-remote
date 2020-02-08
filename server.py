@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger("VnStat Server")
 
 
-async def handler(reader, writer):
+async def send_vnstat(reader, writer):
     data = await reader.read(1)
     addr = writer.get_extra_info("peername")
     logger.info(f"Received {data} from {addr}")
@@ -34,14 +34,7 @@ async def handler(reader, writer):
     writer.write(result_encrypted)
     await writer.drain()
     writer.close()
-
-
-async def main(port):
-    server = await asyncio.start_server(handler, port=port, reuse_port=True)
-    addr = server.sockets[0].getsockname()
-    logger.info(f"Serving on {addr}")
-    await server.serve_forever()
-
+    
 
 def init_key(password):
     key = base64.urlsafe_b64encode(
@@ -54,4 +47,10 @@ if __name__ == "__main__":
     password = sys.argv[1] if len(sys.argv) >= 2 else "test"
     port = int(sys.argv[2]) if len(sys.argv) >= 3 else 10000
     f = init_key(password)
-    asyncio.run(main(port))
+    
+    loop = asyncio.get_event_loop()
+    coro = asyncio.start_server(send_vnstat, port=port, reuse_port=True, loop=loop)
+    server = loop.run_until_complete(coro)
+    addr = server.sockets[0].getsockname()
+    logger.info(f"Serving on {addr}")
+    loop.run_forever()
