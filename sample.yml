@@ -1,0 +1,18 @@
+TOKEN: 
+CHAT: 
+INTERVAL: 7200
+PASSWORD: test
+INFO: |
+  #{host}: Interface {interface}
+  Rx: {rx}, Tx: {tx}
+  Expect Rx: {exrx}, Expect Tx: {extx}
+WARNING: "Traffic usage may exceed limits!"
+ADDRS:
+- HOST: 127.0.0.1
+  PORT: 10000
+  BEGIN: 1
+  LIMIT: 1T
+- HOST: 127.0.0.1
+  PORT: 10000
+  BEGIN: 3
+  LIMIT: Null
