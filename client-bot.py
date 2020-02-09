@@ -104,10 +104,10 @@ def start(update, context):
     for job in context.job_queue.get_jobs_by_name(str(config.get("CHAT"))):
         job.schedule_removal()
     context.job_queue.run_repeating(
-        check_queue, config.get("INTERVAL"), context=context, name=str(config.get("CHAT"))
+        check_queue, interval=config.get("INTERVAL"), first=1, context=context, name=str(config.get("CHAT"))
     )
     jobs = [t.name for t in context.job_queue.jobs()]
-    message.reply_markdown(f"CHAT ID: `{chat.id}`\nCurrent Jobs: {jobs}")
+    message.reply_markdown(f"CHAT ID: `{chat.id}`\nSending to {config.get('CHAT')}\nCurrent Jobs: {jobs}")
     logger.info(f"Start command: Current Jobs: {jobs}")
 
 
@@ -122,15 +122,16 @@ def check_queue(context):
     message = context.bot.send_message(
         config.get("CHAT"), f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     )
+    text = str()
     for i, result in enumerate(results):
         conf = config.get("ADDRS")[i]
         if not result:
-            message = message.edit_text(f"{message.text}\n#{conf.get('HOST')} 掉线")
+            text += (f"#{conf.get('HOST')} 掉线")
             continue
         interface = result.get("interfaces")[0]
         rx = [day.get("rx") for day in interface.get("traffic").get("day")]
         tx = [day.get("tx") for day in interface.get("traffic").get("day")]
-        text = config.get("INFO").format(
+        text += config.get("INFO").format(
             host=conf.get("HOST"),
             interface=interface.get("name"),
             rx=get_sum(rx),
@@ -145,8 +146,8 @@ def check_queue(context):
         )
         if warning:
             text += config.get("WARNING")
-        logger.info(text)
-        message = message.edit_text(f"{message.text}\n{text}")
+    logger.info(text)
+    message.edit_text(f"{message.text}\n{text}")
 
 
 def load_yaml(filename="config.yml"):
@@ -172,6 +173,9 @@ if __name__ == "__main__":
         config = load_yaml()
     logger.info(f"Bot: Starting & Sending to {config.get('CHAT')}")
     updater = Updater(config.get("TOKEN"), use_context=True)
+    updater.job_queue.run_repeating(
+        check_queue, interval=config.get("INTERVAL"), name=str(config.get("CHAT"))
+    )
     updater.dispatcher.add_handler(CommandHandler("start", start))
     updater.dispatcher.add_error_handler(error)
     updater.start_polling()
