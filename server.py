@@ -15,7 +15,7 @@ logger = logging.getLogger("VnStat Server")
 
 
 async def send_vnstat(reader, writer):
-    data = await reader.read(100)
+    data = await reader.readuntil()
     data_decrypted = f.decrypt(data)
     logger.info(f"Received {data_decrypted} from {writer.get_extra_info('peername')}")
     begin = data_decrypted.decode()
@@ -29,7 +29,7 @@ async def send_vnstat(reader, writer):
     except subprocess.CalledProcessError as err:
         logger.warning(f"Subprocess: {err}")
         result = f'{"error": "{err}"}'.encode()
-    result_encrypted = f.encrypt(result)
+    result_encrypted = f.encrypt(result) + b"\n"
     logger.debug(f"Sending:\n{result}\n{result_encrypted}")
     writer.write(result_encrypted)
     await writer.drain()

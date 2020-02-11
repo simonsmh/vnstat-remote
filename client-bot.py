@@ -40,13 +40,14 @@ async def get_vnstat(f, addr):
     else:
         cycle = datetime.today().replace(day=begin)
     cycle_date = cycle.strftime("%Y-%m-%d")
-    request_encrypted = f.encrypt(cycle_date.encode())
+    request_encrypted = f.encrypt(cycle_date.encode()) + b"\n"
     writer.write(request_encrypted)
     await writer.drain()
-    data = await reader.read(4096)
+    data = await reader.readuntil()
     writer.close()
     try:
         data_decrypted = json.loads(f.decrypt(data))
+        logger.debug(f"Receiving:\n{data}\n{data_decrypted}")
     except InvalidToken:
         logger.warning(f"InvalidToken for {addr.get('HOST')}")
         return False
