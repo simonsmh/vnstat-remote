@@ -4,8 +4,10 @@ INTERVAL: 7200
 PASSWORD: test
 INFO: |
   #{host}: Interface {interface}
-  Rx: {rx}, Tx: {tx}
-  Expect Rx: {exrx}, Expect Tx: {extx}
+  Rx: {rx}, Tx: {tx}, TTL: {ttl}
+  Expect Rx: {exrx}, Expect Tx: {extx}, Expect TTL: {exttl}
+OFFLINE: |
+  #{host}: offline!
 WARNING: "Traffic usage may exceed limits!"
 ADDRS:
 - HOST: 127.0.0.1

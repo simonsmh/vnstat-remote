@@ -15,7 +15,7 @@ logger = logging.getLogger("VnStat Server")
 
 
 async def send_vnstat(reader, writer):
-    data = await reader.readuntil()
+    data = await reader.readline()
     data_decrypted = f.decrypt(data)
     logger.info(f"Received {data_decrypted} from {writer.get_extra_info('peername')}")
     begin = data_decrypted.decode()

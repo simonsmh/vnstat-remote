@@ -36,7 +36,7 @@ async def get_vnstat(addr):
     writer.close()
     try:
         data_decrypted = json.loads(f.decrypt(data))
-        logger.debug(f"Receiving:\n{data}\n{data_decrypted}")
+        logger.info(f"Receiving:\n{data}\n{data_decrypted}")
     except InvalidToken:
         logger.warning(f"InvalidToken for {addr.get('host')}")
         return False
@@ -53,8 +53,19 @@ def init_key(password):
     return Fernet(key)
 
 
-def get_expect(dict):
-    return sum(dict) / len(dict) * 31
+
+def get_expect(rx, tx, update_time):
+    def today(dict, update_time):
+        return (
+            dict[-1] / (update_time.get("hour") * 60 + update_time.get("minute")) * 1440
+        )
+
+    def expect(dict, update_time):
+        return (sum(dict[0:-1]) + today(dict, update_time)) / len(dict) * 30
+
+    exrx, extx = expect(rx, update_time), expect(tx, update_time)
+    return exrx, extx, exrx + extx
+
 
 
 if __name__ == "__main__":
@@ -72,8 +83,12 @@ if __name__ == "__main__":
             continue
         logger.info(f'Received from {addrs[i].get("host")}')
         interface = result.get("interfaces")[0]
+        update_time = interface.get("updated").get("time")
         logger.info(f'Parsing Interface {interface.get("name")}')
         rx = [day.get("rx") for day in interface.get("traffic").get("day")]
         tx = [day.get("tx") for day in interface.get("traffic").get("day")]
-        logger.info(f"Rx: {sum(rx)}, Tx: {sum(tx)}")
-        logger.info(f"Expect Rx: {get_expect(rx)}, Expect Tx: {get_expect(tx)}")
+        exrx, extx, exttl = get_expect(rx, tx, update_time)
+        logger.info(f"Rx: {sum(rx)}, Tx: {sum(tx)}, TTL: {sum(rx + tx)}")
+        logger.info(
+            f"Expect Rx: {exrx}, Expect Tx: {extx}, Expect TTL: {exttl}"
+        )

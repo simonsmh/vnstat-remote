@@ -43,7 +43,7 @@ async def get_vnstat(f, addr):
     request_encrypted = f.encrypt(cycle_date.encode()) + b"\n"
     writer.write(request_encrypted)
     await writer.drain()
-    data = await reader.readuntil()
+    data = await reader.readline()
     writer.close()
     try:
         data_decrypted = json.loads(f.decrypt(data))
@@ -68,8 +68,17 @@ def get_sum(dict):
     return convert_size(sum(dict))
 
 
-def get_expect(dict):
-    return convert_size(sum(dict) / len(dict) * 30)
+def get_expect(rx, tx, update_time):
+    def today(dict, update_time):
+        return (
+            dict[-1] / (update_time.get("hour") * 60 + update_time.get("minute")) * 1440
+        )
+
+    def expect(dict, update_time):
+        return (sum(dict[0:-1]) + today(dict, update_time)) / len(dict) * 30
+
+    exrx, extx = expect(rx, update_time), expect(tx, update_time)
+    return convert_size(exrx), convert_size(extx), convert_size(exrx + extx)
 
 
 def convert_size(size):
@@ -105,10 +114,16 @@ def start(update, context):
     for job in context.job_queue.get_jobs_by_name(str(config.get("CHAT"))):
         job.schedule_removal()
     context.job_queue.run_repeating(
-        check_queue, interval=config.get("INTERVAL"), first=1, context=context, name=str(config.get("CHAT"))
+        check_queue,
+        interval=config.get("INTERVAL"),
+        first=1,
+        context=context,
+        name=str(config.get("CHAT")),
     )
     jobs = [t.name for t in context.job_queue.jobs()]
-    message.reply_markdown(f"CHAT ID: `{chat.id}`\nSending to {config.get('CHAT')}\nCurrent Jobs: {jobs}")
+    message.reply_markdown(
+        f"CHAT ID: `{chat.id}`\nSending to {config.get('CHAT')}\nCurrent Jobs: {jobs}"
+    )
     logger.info(f"Start command: Current Jobs: {jobs}")
 
 
@@ -127,18 +142,22 @@ def check_queue(context):
     for i, result in enumerate(results):
         conf = config.get("ADDRS")[i]
         if not result:
-            text += (f"#{conf.get('HOST')} 掉线")
+            text += config.get("OFFLINE").format(host=conf.get("HOST"))
             continue
         interface = result.get("interfaces")[0]
+        update_time = interface.get("updated").get("time")
         rx = [day.get("rx") for day in interface.get("traffic").get("day")]
         tx = [day.get("tx") for day in interface.get("traffic").get("day")]
+        exrx, extx, exttl = get_expect(rx, tx, update_time)
         text += config.get("INFO").format(
             host=conf.get("HOST"),
             interface=interface.get("name"),
             rx=get_sum(rx),
             tx=get_sum(tx),
-            exrx=get_expect(rx),
-            extx=get_expect(tx),
+            ttl=get_sum(rx + tx),
+            exrx=exrx,
+            extx=extx,
+            exttl=exttl,
         )
         warning = (
             (convert_size(conf.get("LIMIT")) < sum(rx) + sum(tx))
